@@ -1,0 +1,6 @@
+projectKey=panel
+serverUrl=http://localhost:8000
+serverVersion=25.12.0.117093
+dashboardUrl=http://localhost:8000/dashboard?id=panel
+ceTaskId=c18e1f01-12d1-4a04-b99f-f54e45c7e3f9
+ceTaskUrl=http://localhost:8000/api/ce/task?id=c18e1f01-12d1-4a04-b99f-f54e45c7e3f9

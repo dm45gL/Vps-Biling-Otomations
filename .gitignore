@@ -1,0 +1,33 @@
+# Node.js
+node_modules/
+dist/
+npm-debug.log*
+yarn-error.log*
+
+# Prisma
+/prisma/migrations/
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cookies / temp files
+cookies.txt
+admin_cookies.txt
+
+# Docker overrides
+docker-compose.override.yml
+
+.history

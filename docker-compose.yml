@@ -1,0 +1,123 @@
+version: "3.9"
+
+services:
+  # ───────────────────────────────────────
+  # POSTGRESQL
+  # ───────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: my-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: xxxxxxxxxxxxxx
+      POSTGRES_DB: hosting_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────────────────────
+  # REDIS (dengan password)
+  # ───────────────────────────────────────
+  redis:
+    image: redis:alpine
+    container_name: my-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: 'xxxxxxxxxxxxxx'
+    command: redis-server --appendonly yes --requirepass 'xxxxxxxxxxxxxx'
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "xxxxxxxxxxxxxxxx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────────────────────────────
+  # MINIO (S3 Compatible)
+  # ───────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Web console
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: xxxxxxxxxxxxx
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  # ───────────────────────────────────────────────
+  # AZURITE (Azure Blob Emulator)
+  # ───────────────────────────────────────────────
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: azurite
+    restart: unless-stopped
+    ports:
+      - "10000:10000"  # Blob endpoint
+      - "10001:10001"  # Queue endpoint
+      - "10002:10002"  # Table endpoint
+    command: >
+      azurite
+      --blobHost 0.0.0.0
+      --queueHost 0.0.0.0
+      --tableHost 0.0.0.0
+      --loose
+    volumes:
+      - azurite_data:/data
+
+  # ───────────────────────────────────────────────
+  # NFS Server
+  # ───────────────────────────────────────────────
+  nfs:
+    image: itsthenetwork/nfs-server-alpine:latest
+    container_name: nfs-server
+    restart: unless-stopped
+    privileged: true
+    environment:
+      SHARED_DIRECTORY: "/shared"
+    ports:
+      - "2049:2049"
+    volumes:
+      - nfs_data:/shared
+
+  # ───────────────────────────────────────────────
+  # App container contoh (akses NFS)
+  # ───────────────────────────────────────────────
+  app:
+    image: node:20
+    container_name: app
+    depends_on:
+      - nfs
+    volumes:
+      - type: volume
+        source: nfs_data
+        target: /mnt/nfs
+        volume:
+          nocopy: true
+    working_dir: /mnt/nfs
+    command: tail -f /dev/null  # container tetap hidup untuk testing
+
+# ───────────────────────────────────────────────
+# VOLUMES (persist data setelah container stop)
+# ───────────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  azurite_data:
+  nfs_data:

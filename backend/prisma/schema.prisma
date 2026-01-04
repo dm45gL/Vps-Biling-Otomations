@@ -1,0 +1,605 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────────────────
+// ADMIN (dengan role)
+// ───────────────────────────────────────
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  role      Role     @default(BUSINESS)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admins")
+}
+
+// ───────────────────────────────────────
+// CLIENT (tanpa role)
+// ───────────────────────────────────────
+model Client {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+
+  orders    Order[]
+  vps VPS[]
+
+
+  billingAddresses BillingAddress[]
+  promoUsage PromoUsage[]  
+  @@map("clients")
+}
+
+// ───────────────────────────────────────
+// REFRESH TOKEN
+// ───────────────────────────────────────
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  userType  UserType // 'ADMIN' | 'CLIENT'
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+// ───────────────────────────────────────
+// OTP (disimpan sementara, sebaiknya di Redis — tapi ini fallback)
+// ───────────────────────────────────────
+model Otp {
+  id        String   @id @default(cuid())
+  email     String
+  hash      String // hashed OTP
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([email, hash])
+  @@map("otps")
+}
+
+// ───────────────────────────────────────
+// ENUMERATIONS
+// ───────────────────────────────────────
+enum Role {
+  SYSADMIN
+  FINANCE
+  BUSINESS
+}
+
+enum UserType {
+  ADMIN
+  CLIENT
+}
+
+/////////////////////////////////////////
+// Hypervisor
+/////////////////////////////////////////
+
+model Hypervisor {
+  id        String           @id @default(cuid())
+  name      String
+  type      HypervisorType
+  host      String
+  username  String
+  token     String // terenkripsi
+  status    HypervisorStatus @default(OFFLINE)
+  isMaster  Boolean          @default(false) 
+  vps VPS[]
+  templates Template[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  regionId String?   // nullable
+  region   Region?  @relation(fields: [regionId], references: [id])
+
+}
+
+enum HypervisorType {
+  PROXMOX
+  VMWARE
+}
+
+enum HypervisorStatus {
+  ONLINE
+  OFFLINE
+}
+
+
+
+model Region {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+
+  hypervisors Hypervisor[]
+  ipAddresses IPAddress[]
+  rawProductRegions RawProductRegion[]  
+  vps VPS[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+
+
+model RawProductRegion {
+  id           String     @id @default(cuid())
+  rawProductId String
+  regionId     String
+
+  rawProduct   RawProduct @relation(fields: [rawProductId], references: [id])
+  region       Region     @relation(fields: [regionId], references: [id])
+
+  @@unique([rawProductId, regionId])
+}
+
+
+
+/////////////////////////////////////////
+// Template
+/////////////////////////////////////////
+model TemplateCategory {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  groups    TemplateGroup[]
+  rawProducts RawProductCategory[]  // join table ke RawProduct
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model TemplateGroup {
+  id           String       @id @default(cuid())
+  name         String
+  categoryId   String? 
+  category     TemplateCategory? @relation(fields: [categoryId], references: [id])
+  templates    Template[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Template {
+  id           String      @id @default(cuid())
+  hypervisorId String
+  hypervisor   Hypervisor @relation(fields: [hypervisorId], references: [id])
+  node         String
+  vmid         Int
+  name         String
+  type         String
+  groupId      String?
+  isActive     Boolean     @default(true)
+  group        TemplateGroup? @relation(fields: [groupId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  vps VPS[]
+  @@unique([hypervisorId, node, vmid])
+}
+
+
+
+
+enum TemplateType {
+  qemu
+  lxc
+}
+
+/////////////////////////////////////////
+// Backup
+/////////////////////////////////////////
+
+enum BackupProvider {
+  S3
+  NFS
+  AZURE
+}
+
+// Backup storage type
+enum BackupStorageType {
+  PRIMARY
+  SECONDARY
+}
+
+// Backup storage status
+enum BackupStorageStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+model BackupStorage {
+  id          String   @id @default(cuid())
+  name        String
+  provider    BackupProvider
+  storageType BackupStorageType @default(PRIMARY)
+
+  // Cloud / NFS configuration
+  endpoint    String?   // URL / host
+  bucket      String?   // S3 bucket / Azure container
+  accessKey   String?   // S3 / Azure
+  secretKey   String?   // S3 / Azure
+  region      String?   // AWS region or Azure region
+  directory   String?   // NFS mount point / path
+
+  totalSpace  Int?      // in GB
+  usedSpace   Int?      // in GB
+
+  histories   BackupHistory[]
+  isDefault   Boolean   @default(false)
+  status      BackupStorageStatus @default(ACTIVE)
+  isActive    Boolean   @default(true)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("backup_storages")
+}
+
+
+
+/////////////////////////////////////////
+// Backup policy
+/////////////////////////////////////////
+
+model BackupPolicy {
+  id              String   @id @default(cuid())
+  name            String
+  cron            String?          // null = no auto backup
+  retentionDays   Int
+  isSystem        Boolean @default(true)
+  maxStorageGB Int
+  maxDailyBackup  Int
+
+  histories       BackupHistory[]
+  rawProducts     RawProduct[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+
+
+model BackupHistory {
+  id        String   @id @default(cuid())
+  vpsId       String?
+  policyId  String?
+  storageId String
+  path      String
+  sizeBytes Int
+  status    String
+  createdAt DateTime @default(now())
+ 
+  vps       VPS?  @relation(fields: [vpsId], references: [id])
+  policy BackupPolicy? @relation(fields: [policyId], references: [id])
+  storage   BackupStorage @relation(fields: [storageId], references: [id])
+}
+
+
+/////////////////////////////////////////
+// IP Address
+/////////////////////////////////////////
+
+
+//IP pool
+model IPAddress {
+  id        String   @id @default(cuid())
+  ip        String   @unique
+  gateway   String?       // e.g. 192.168.1.1
+  netmask   Int?          // e.g. 24
+  dns       String?       // e.g. "8.8.8.8 1.1.1.1"
+  type      IPType   @default(PRIVATE)
+  status    IPStatus @default(AVAILABLE)
+  note      String?
+  regionId  String
+
+  vps       VPS?
+
+  region    Region   @relation(fields: [regionId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+ 
+
+  @@map("ip_addresses")
+}
+
+enum IPType {
+  PUBLIC
+  PRIVATE
+}
+
+enum IPStatus {
+  AVAILABLE
+  USED
+  RESERVED
+}
+
+
+
+/////////////////////////////////////////
+// RAW PRODUK
+/////////////////////////////////////////
+model RawProduct {
+  id               String                  @id @default(cuid())
+  name             String
+  cpu              Int
+  ram              Int
+  disk             Int
+  bandwidth        Int
+
+  backupPolicyId   String?
+  backupPolicy     BackupPolicy?           @relation(fields: [backupPolicyId], references: [id])
+
+  categories       RawProductCategory[]    @relation("RawProductToCategory")
+  productPricing   ProductPricing[] 
+  publicProducts   PublicProduct[]
+  regions          RawProductRegion[] 
+  vps              VPS[] 
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  deletedAt        DateTime?
+}
+
+model RawProductCategory {
+  id                 String       @id @default(cuid())
+  rawProductId       String
+  templateCategoryId String
+
+  rawProduct         RawProduct   @relation("RawProductToCategory", fields: [rawProductId], references: [id])
+  templateCategory   TemplateCategory @relation(fields: [templateCategoryId], references: [id])
+
+  @@unique([rawProductId, templateCategoryId])
+}
+
+
+
+
+
+
+/////////////////////////////////////////
+// Promo PRODUK
+/////////////////////////////////////////
+
+enum PromoType {
+  PERCENT
+  AMOUNT
+}
+
+model Promo {
+  id              String      @id @default(cuid())
+  code            String      @unique
+  type            PromoType
+  value           Int
+
+  minOrderAmount  Int?        // optional minimum belanja
+  maxDiscount     Int?        // batas diskon jika type = PERCENT
+
+  startsAt        DateTime
+  endsAt          DateTime
+
+  globalLimit     Int?        // total kuota
+  userLimit       Int?        // batas pemakaian per user
+
+  isActive        Boolean     @default(true)
+
+  usedCount       Int         @default(0)    // total seluruh pemakaian
+  usage           PromoUsage[]
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+
+model PromoUsage {
+  id        String   @id @default(cuid())
+  promoId   String
+  clientId  String
+  usedAt    DateTime @default(now())
+
+  promo     Promo    @relation(fields: [promoId], references: [id])
+  client    Client   @relation(fields: [clientId], references: [id])
+  orderId  String?
+  @@unique([promoId, clientId, usedAt])
+}
+
+
+
+
+
+
+
+/////////////////////////////////////////
+// Pricing PRODUK
+/////////////////////////////////////////
+
+model ProductPricing {
+  id                 String           @id @default(cuid())
+  
+  rawProductId       String
+  rawProduct         RawProduct       @relation(fields: [rawProductId], references: [id])
+
+  pricingDurationId  String
+  pricingDuration    PricingDuration  @relation(fields: [pricingDurationId], references: [id])
+
+  price              Int              // harga server utama untuk durasi ini
+  backupPrice        Int?             // harga backup untuk durasi ini (optional)
+
+  isActive           Boolean          @default(true)
+
+  orders             Order[]
+  vps VPS[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([rawProductId, pricingDurationId])
+}
+
+
+
+model PricingDuration {
+  id        String   @id @default(cuid())
+  label     String   // "6 Months", "1 Year", "2 Years"
+  months    Int      // 6, 12, 24
+  isActive  Boolean  @default(true)
+
+  productPricings ProductPricing[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([months])
+}
+
+/////////////////////////////////////////
+// Billing Address
+/////////////////////////////////////////
+
+model BillingAddress {
+  id           String   @id @default(cuid())
+  clientId     String
+  email        String  
+  fullName     String
+  companyName  String?
+  country      String
+  state        String
+  city         String
+  addressLine1 String
+  addressLine2 String?
+  postalCode   String
+  phone        String
+  isDefault    Boolean  @default(false)
+  orders Order[]
+
+  client       Client   @relation(fields: [clientId], references: [id])
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+
+
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  clientId        String
+  pricingId       String
+  billingAddressId String
+  externalId       String @unique 
+  rawPrice        Int
+  discount        Int
+  finalPrice      Int
+  months          Int
+  nextBillingDate DateTime
+
+  status          OrderStatus @default(PENDING_PAYMENT)
+
+  invoiceId       String?
+  invoiceUrl      String?
+  invoiceExpired  DateTime?
+  region            String?
+  templateId        String? 
+  paidAt          DateTime?
+  vps             VPS[] 
+  client          Client         @relation(fields: [clientId], references: [id])
+  pricing         ProductPricing @relation(fields: [pricingId], references: [id])
+  billingAddress  BillingAddress @relation(fields: [billingAddressId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+
+
+model PublicProduct {
+  id           String       @id @default(cuid())
+  rawProductId String
+  rawProduct   RawProduct   @relation(fields: [rawProductId], references: [id])
+  publicId     String       @unique
+  name         String
+  description  String?
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+
+
+
+
+enum VPSStatus {
+  PROVISIONING
+  RUNNING
+  STOPPED
+  SUSPENDED
+  TERMINATED
+  ERROR
+}
+
+model VPS {
+  id              String   @id @default(cuid())
+
+  clientId        String
+  orderId         String
+  rawProductId    String
+  pricingId       String
+
+  regionId        String
+  hypervisorId    String
+  templateId      String
+
+  vmid            Int
+  hostname        String
+
+  cpu             Int
+  ram             Int
+  disk            Int
+  bandwidth       Int
+
+  ipAddressId     String @unique
+
+  backupEnabled   Boolean @default(false)
+  backupPolicyId  String?
+  backupProvider  BackupProvider?
+
+  status          VPSStatus @default(PROVISIONING)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+  backups         BackupHistory[]  
+  
+  client          Client       @relation(fields: [clientId], references: [id])
+  order           Order        @relation(fields: [orderId], references: [id])
+  rawProduct      RawProduct   @relation(fields: [rawProductId], references: [id])
+  pricing         ProductPricing @relation(fields: [pricingId], references: [id])
+
+  region          Region       @relation(fields: [regionId], references: [id])
+  hypervisor      Hypervisor   @relation(fields: [hypervisorId], references: [id])
+  template        Template     @relation(fields: [templateId], references: [id])
+  ipAddress       IPAddress    @relation(fields: [ipAddressId], references: [id])
+
+  @@unique([hypervisorId, vmid])
+}
+
+
+
+
