@@ -95,7 +95,19 @@ Database: postgresql, redis
 Service: whm, proxmox, vmware, ESXi 
 
 
-
+## Unitest
 ![Unitest](asets/Screenshot%20From%202026-01-04%2010-37-02.png)
+
+
+## Linter
+![Linter](asets/Screenshot%20From%202026-01-04%2010-38-18.png)
+
+
+
+## Run SonarQube
+![Run SonarQube](asets/Screenshot%20From%202026-01-04%2010-43-13.png)
+
+## Hasil SonarQube
+![Hasil SonarQube](asets/Screenshot%20From%202026-01-04%2010-52-22.png)
 
 
