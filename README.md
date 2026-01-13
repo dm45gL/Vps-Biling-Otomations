@@ -1,12 +1,6 @@
 
 # Hypervisor-Biling-Otomations
 
-Tugas Mata Kuliah: Analisis & Pengujian Sistem IF7A
-
-Mata Kuliah: Analisis & Pengujian Sistem
-
-Nama:  Dimas Galih Laksono (22EO10019)
-
 Proyek Repositori ini berisi artefak, dokumen, dan kode yang berkaitan dengan tugas mata kuliah Analisis & Pengujian Sistem. Proyek ini bertujuan untuk melakukan penjualan VPS, Hosting dan reseler domain, projek ini di buat menggunakan expresJS dan juga typescrip, dan menggunakan database PostgreSQL, program ini di buat dengan tujuan hypervisor otomatios dengan penerapan paymentgetway yang tersinkronisasi. 
 
 Desain Proyek (Unified Modeling System)
